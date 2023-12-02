@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exploration Lab</title>
+    <!-- Styles -->
+    <style>
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Arial', sans-serif;
+            background-color: #000;
+            color: #fff;
+        }
+
+        .title-bar {
+            width: 100%;
+            padding: 10px;
+            background-color: #d057db;
+            text-align: center;
+            position: fixed;
+            top: 0;
+        }
+
+        .container {
+            text-align: center;
+            background-color: #111;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-top: 60px;
+        }
+
+        .button-container {
+            margin-top: 20px;
+        }
+
+        .upload-button,
+        .download-button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin: 10px;
+            cursor: pointer;
+            background-color: #d057db;
+            color: #ffffff;
+            border: none;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+
+        .upload-button:hover,
+        .download-button:hover {
+            background-color: #c755d1;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .quill-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 20px;
+            height: 300px;
+            overflow-y: auto;
+        }
+
+        .quill-editor {
+            width: 80%;
+            margin: 10px;
+            font-size: 18px;
+        }
+
+        .ql-toolbar {
+            font-size: 12px;
+        }
+
+        .ql-toolbar .ql-picker-label,
+        .ql-toolbar .ql-picker-options,
+        .ql-toolbar .ql-picker-item,
+        .ql-toolbar button {
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header Section -->
+    <div class="title-bar">
+        <h2>Exploration Lab</h2>
+    </div>
+
+    <!-- Main Content Section -->
+    <div class="container">
+        <h1>Welcome to the Story Upload Page</h1>
+        <p>Upload the Story and Sheet of names you wish to change.</p>
+
+        <!-- Buttons for Uploading Story and Names -->
+        <div class="button-container">
+            <button class="upload-button" onclick="document.getElementById('storyInput').click()">Upload Story</button>
+            <input type="file" id="storyInput" class="file-input" accept=".docx" onchange="handleStoryUpload(this)">
+            
+            <button class="upload-button" onclick="document.getElementById('namesInput').click()">Upload Names</button>
+            <input type="file" id="namesInput" class="file-input" accept=".xlsx" onchange="handleNamesUpload(this)">
+        </div>
+
+        <!-- Button for Processing Story -->
+        <div>
+            <button class="download-button" onclick="processStory()">Create New Story</button>
+        </div>
+
+        <!-- Quill Editor Section -->
+        <div class="quill-container">
+            <p>Old Story:</p>
+            <div id="quill-editor1" class="quill-editor"></div>
+            <p>New Story:</p>
+            <div id="quill-editor2" class="quill-editor"></div>
+        </div>
+        
+        <!-- Button for Downloading New Story -->
+        <div>
+            <button class="download-button" onclick="generateDocx()">Download New Story</button>
+        </div>
+
+    </div>
+
+    <!-- External Dependencies -->
+    <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+    <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.5/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/docxtemplater/3.21.0/docxtemplater.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <!-- Script Section -->
+    <script>
+        let storyText;
+        let oldStoryText;
+        let newStoryText;
+        let namesData;
+        let quill1, quill2;
+
+        // Initialize Quill editors
+        function initializeQuillEditors() {
+            quill1 = new Quill('#quill-editor1', {
+                readOnly: true,
+                theme: 'snow'
+            });
+
+            quill2 = new Quill('#quill-editor2', {
+                readOnly: true,
+                theme: 'snow'
+            });
+
+            updateQuillEditors();
+        }
+
+        // Update Quill editors with story content
+        function updateQuillEditors() {
+            if (storyText && oldStoryText && newStoryText) {
+                quill1.clipboard.dangerouslyPasteHTML(0, oldStoryText);
+                quill2.clipboard.dangerouslyPasteHTML(0, newStoryText);
+            } else {
+                quill1.setText('');
+                quill2.setText('');
+            }
+        }
+
+        // Handle upload of story file
+        function handleStoryUpload(input) {
+            const file = input.files[0];
+
+            if (file && file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+                const reader = new FileReader();
+
+                reader.onload = function (e) {
+                    try {
+                        const content = e.target.result;
+
+                        // Use JSZip to extract text from .docx file
+                        JSZip.loadAsync(content).then(function (zip) {
+                            const docxContentPromise = zip.files['word/document.xml'].async('string');
+
+                            // Extract text
+                            docxContentPromise.then(function (content) {
+                                storyText = content;
+                                oldStoryText = storyText;
+
+                                // Log the story text
+                                console.log(storyText);
+
+                                // Continue with any other processing or use of storyText
+                            }).catch(function (error) {
+                                console.error('Error extracting text from .docx file:', error);
+                            });
+                        }).catch(function (error) {
+                            console.error('Error loading .docx file:', error);
+                        });
+                    } catch (error) {
+                        console.error('Error during text extraction:', error);
+                    }
+                };
+
+                reader.readAsArrayBuffer(file);
+            } else {
+                alert("Please upload a valid .docx file.");
+            }
+        }
+
+        // Handle upload of names file
+        function handleNamesUpload(input) {
+            const file = input.files[0];
+
+            if (file && file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+                const reader = new FileReader();
+
+                reader.onload = function (e) {
+                    try {
+                        const content = e.target.result;
+
+                        const workbook = XLSX.read(content, { type: 'array' });
+                        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                        namesData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+                        console.log("Names Data:", namesData);
+                    } catch (error) {
+                        console.error('Error reading data from .xlsx file:', error);
+                    }
+                };
+
+                reader.readAsArrayBuffer(file);
+            } else {
+                alert("Please upload a valid .xlsx file.");
+            }
+        }
+
+        // Process story by finding and replacing names
+        function processStory() {
+            if (storyText !== null && storyText !== undefined && namesData !== null && namesData !== undefined) {
+                findAndReplace();
+                initializeQuillEditors();
+            } else {
+                alert("Please upload both the story and names before generating a new story.");
+            }
+        }
+
+        // Generate and download a new .docx file
+        function generateDocx() {
+            try {
+                const match = newStoryText.match(/<w:t[^>]*>(.*?)<\/w:t>/i);
+                const extractedText = match ? match[1] : '';
+
+                const content = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+                    <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+                        <w:body>
+                            <w:p>
+                                <w:r>
+                                    <w:t>${extractedText}</w:t>
+                                </w:r>
+                            </w:p>
+                        </w:body>
+                    </w:document>`;
+
+                const blob = new Blob([extractedText], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+
+                saveAs(blob, 'new_story.docx');
+            } catch (error) {
+                console.error('Error generating .docx file:', error);
+                alert('Error generating .docx file. See console for details.');
+            }
+        }
+
+        // Find and replace names in the story
+        function findAndReplace() {
+            if (storyText && namesData && Array.isArray(namesData)) {
+                namesData.forEach(row => {
+                    if (Array.isArray(row)) {
+                        const find = row[0];
+                        const replace = row[1];
+                        const regex = new RegExp(find, 'ig');
+                        storyText = storyText.replace(regex, replace);
+                    }
+                });
+
+                console.log("Updated Story Text:", storyText);
+                newStoryText = storyText;
+            } else {
+                alert("Error: Missing data for find and replace. Please upload both a story and names file.");
+            }
+        }
+    </script>
+</body>
+</html>
